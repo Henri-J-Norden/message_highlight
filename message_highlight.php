@@ -5,6 +5,12 @@
 * @author Cor Bosman (cor@roundcu.be)
 */
 
+enum mh_Match_Type: int
+{
+  case contains_str = 0;
+  case contains_regex = 1;
+}
+
 class message_highlight extends rcube_plugin
 {
   public $task = 'mail|settings';
@@ -85,8 +91,18 @@ class message_highlight extends rcube_plugin
    */
   function mh_find_match($message) {
     foreach($this->prefs as $p) {
-      if(stristr(rcube_mime::decode_header($message->{$p['header']}), $p['input'])) {
-        return($p['color']);
+      $header = rcube_mime::decode_header($message->{$p['header']});
+      //$headerq = rcube::Q($header);
+      //$this->rc->output->show_message("'{$headerq}' {$p['type']->name} '{$p['input']}'?");
+      switch ($p['type']) {
+        case mh_Match_Type::contains_str:
+          if (stristr($header, $p['input'])) return($p['color']);
+          break;
+        case mh_Match_Type::contains_regex:
+          if (preg_match("/{$p['input']}/", $header)) return($p['color']);
+          break;
+        default:
+          $this->rc->output->show_message("Not implemented: {$p['type']->name}", 'error');
       }
     }
     return false;
@@ -107,7 +123,7 @@ class message_highlight extends rcube_plugin
 
       foreach($prefs as $p) {
         $args['blocks']['mh_preferences']['options'][$i++] = array(
-          'content' => $this->mh_get_form_row($p['header'], $p['input'], $p['color'], true)
+          'content' => $this->mh_get_form_row($p['header'], $p['input'], $p['color'], true, $p['type'])
         );
       }
 
@@ -127,7 +143,7 @@ class message_highlight extends rcube_plugin
   }
 
   // create a form row
-  function mh_get_form_row($header = 'from', $input = '', $color = '#ffffff', $delete = false) {
+  function mh_get_form_row($header = 'from', $input = '', $color = '#ffffff', $delete = false, $match = mh_Match_Type::contains_str) {
 
     // header select box
     $header_select = new html_select(array('name' => '_mh_header[]', 'class' => 'rcmfd_mh_header form-control custom-select pretty-select'));
@@ -135,6 +151,10 @@ class message_highlight extends rcube_plugin
     $header_select->add(rcube::Q($this->gettext('from')), 'from');
     $header_select->add(rcube::Q($this->gettext('to')), 'to');
     $header_select->add(rcube::Q($this->gettext('cc')), 'cc');
+
+    $type_select = new html_select(array('name' => '_mh_type[]', 'class' => 'rcmfd_mh_header form-control custom-select pretty-select'));
+    $type_select->add(rcube::Q($this->gettext('mh_contains_str')), mh_Match_Type::contains_str->value);
+    $type_select->add(rcube::Q($this->gettext('mh_contains_regex')), mh_Match_Type::contains_regex->value);
 
     // input field
     $input = new html_inputfield(array('name' => '_mh_input[]', 'class' => 'rcmfd_mh_input form-control', 'type' => 'text', 'autocomplete' => 'off', 'value' => $input));
@@ -152,7 +172,7 @@ class message_highlight extends rcube_plugin
 
     $content = html::div('mh_preferences_row',
       html::div('', $header_select->show($header)) .
-      html::div('ml-3 text-center', html::span('mh_matches', rcube::Q($this->gettext('mh_matches')))) .
+      html::div('ml-3', $type_select->show($match)) .
       html::div('ml-3', $input->show()) .
       html::div('ml-5 text-center', html::span('mh_color', rcube::Q($this->gettext('mh_color')))) .
       html::div('ml-3', $color) .
@@ -180,13 +200,18 @@ class message_highlight extends rcube_plugin
     $rcmail = rcmail::get_instance();
 
     $header  = rcube_utils::get_input_value('_mh_header', rcube_utils::INPUT_POST);
-    $input   = rcube_utils::get_input_value('_mh_input', rcube_utils::INPUT_POST);
+    $type   = rcube_utils::get_input_value('_mh_type', rcube_utils::INPUT_POST);
+    $input   = rcube_utils::get_input_value('_mh_input', rcube_utils::INPUT_POST, true);
     $color   = rcube_utils::get_input_value('_mh_color', rcube_utils::INPUT_POST);
-
 
     for($i=0; $i < count($header); $i++) {
       if(!in_array($header[$i], array('subject', 'from', 'to', 'cc'))) {
         $rcmail->output->show_message('message_highlight.headererror', 'error');
+        return;
+      }
+      $type_i = mh_Match_Type::tryFrom($type[$i]);
+      if (is_null($type_i)) {
+        $rcmail->output->show_message('message_highlight.typeerror', 'error');
         return;
       }
       if(!preg_match('/^#[0-9a-fA-F]{2,6}$/', $color[$i])) {
@@ -196,7 +221,7 @@ class message_highlight extends rcube_plugin
       if($input[$i] == '') {
         continue;
       }
-      $prefs[] = array('header' => $header[$i], 'input' => $input[$i], 'color' => $color[$i]);
+      $prefs[] = array('header' => $header[$i], 'input' => $input[$i], 'color' => $color[$i], 'type' => $type_i);
     }
 
     $args['prefs']['message_highlight'] = $prefs;

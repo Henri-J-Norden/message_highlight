@@ -1,6 +1,9 @@
 <?php
 $labels['mh_title'] = 'Message Highlights';
-$labels['mh_matches'] = 'matches';
+
+$labels['mh_contains_str'] = 'contains text';
+$labels['mh_contains_regex'] = 'contains regular expression';
+
 $labels['mh_color'] = 'color';
 $labels['mh_delete'] = 'delete';
 $labels['mh_delete_description'] = 'Delete this line';
@@ -11,6 +14,7 @@ $labels['deleteconfirm'] = 'Do you really want to delete this rule?';
 // these should never happen, but add anyways
 $labels['headererror'] = 'Error in message rule';
 $labels['inputempty'] = 'One or more of your matches are empty';
+$labels['typeerror'] = 'Invalid/unknown match type';
 $labels['invalidcolor'] = 'Invalid color';
 
 ?>
